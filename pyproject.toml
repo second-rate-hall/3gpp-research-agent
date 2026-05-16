@@ -1,0 +1,17 @@
+[project]
+name = "3gpp-research-agent"
+version = "0.1.0"
+description = "A dedicated local 3GPP standards research agent powered by NVIDIA NIM and official evidence retrieval."
+requires-python = ">=3.10"
+dependencies = []
+
+[project.optional-dependencies]
+pdf = ["pypdf>=4.0.0"]
+
+[project.scripts]
+agent3gpp = "agent3gpp.__main__:main"
+3gpp-research-agent = "agent3gpp.__main__:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"

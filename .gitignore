@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+.env
+data/incoming/*
+data/processed/*
+data/index/*
+runs/*
+!data/incoming/.gitkeep
+!data/processed/.gitkeep
+!data/index/.gitkeep
+!runs/.gitkeep
+*.log
+*.tmp

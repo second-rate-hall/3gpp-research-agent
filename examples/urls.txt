@@ -1,0 +1,3 @@
+# Add one official 3GPP URL per line.
+# Example:
+# https://www.3gpp.org/ftp/tsg_ran/WG2_RL2/TSGR2_104/Docs/R2-1817862.zip
