@@ -1,55 +1,27 @@
 # 3GPP Research Agent
 
-`3gpp-research-agent` 是“路线二：自建 3GPP 专用 Agent”的可运行实现。它不是网页聊天入口，也不是工作流模板，而是一个面向 3GPP 标准研究的 CLI Agent：用户输入研究议题后，Agent 自动规划研究范围、下载官方 3GPP 资料、解析文档、建立本地检索库、检索证据，并调用 NVIDIA NIM 生成带证据表和核验状态的深度研究报告。
+`3gpp-research-agent` is a local CLI agent for evidence-grounded 3GPP standards research.
 
-## 与 3gpp-research-kit 的关系
+Give it a research topic, and it can plan the investigation, download official 3GPP specification archives, parse documents, build a local SQLite FTS evidence database, retrieve evidence, and generate a structured research report with verification status.
 
-`3gpp-research-kit` 是可独立使用的研究工作台、Codex skill 和证据工具层；`3gpp-research-agent` 是路线二的产品化 CLI Agent。两者的长期分工是：
+It is designed for standards engineers, protocol researchers, and teams experimenting with agentic research over 3GPP material.
 
-- `3gpp-research-kit` 负责通用证据能力：下载、解析、索引、检索、关系表、报告模板和证据核验。
-- `3gpp-research-agent` 负责专用 Agent 能力：Planner、模型调用、多阶段报告生成、专项报告器、运行记录和 CLI 体验。
-
-当前实现为了保证 `3gpp-research-agent` 可独立运行，仍内置了一套轻量 evidence store（`agent3gpp/store.py`）。后续工程化方向是逐步把这部分收敛为对 `3gpp-research-kit` 的调用，避免两套资料处理和证据核验逻辑长期分叉。
-
-## 目标
+## What It Does
 
 ```text
-user topic
--> Planner 生成研究计划、候选规范、检索 query、比较轴和核验问题
--> 自动下载官方 3GPP specification archive
--> 解析 ZIP / DOCX / TXT / HTML / CSV / optional PDF
--> 建立 SQLite FTS evidence database
--> 按计划执行多 query 证据检索和关系抽取
--> Report Writer / Verifier 生成深度研究报告
--> 默认保存到 runs/
+research question
+-> planner proposes task type, candidate specs, queries, comparison axes
+-> fetch official 3GPP specs when needed
+-> parse ZIP / DOCX / TXT / MD / CSV / HTML / optional PDF
+-> build local evidence database
+-> retrieve and rank evidence
+-> call NVIDIA NIM compatible chat completions
+-> write a deep research report under runs/
 ```
 
-## 安全提示
+The agent is intentionally evidence-constrained. If CR, TDoc, Meeting Report, or clause-level evidence is missing, the report should mark the related conclusion as `needs_verification`.
 
-不要把真实 API key 写进 README、代码或 Git。请使用环境变量或本地 `.env`。
-
-```bash
-copy .env.example .env
-```
-
-编辑 `.env`：
-
-```text
-NVIDIA_API_KEY=nvapi-your-key-here
-NVIDIA_BASE_URL=https://integrate.api.nvidia.com/v1
-NVIDIA_MODEL=deepseek-ai/deepseek-v4-flash
-```
-
-可选：为 Planner 和 Writer 分别指定模型。
-
-```text
-NVIDIA_PLANNER_MODEL=qwen/qwen3.5-122b-a10b
-NVIDIA_WRITER_MODEL=deepseek-ai/deepseek-v4-flash
-```
-
-NVIDIA NIM for LLMs 提供 OpenAI-compatible `/v1/chat/completions` endpoint。本项目默认使用 `https://integrate.api.nvidia.com/v1`。
-
-## 安装
+## Installation
 
 ```bash
 python -m venv .venv
@@ -57,39 +29,62 @@ python -m venv .venv
 pip install -e .
 ```
 
-如需 PDF 解析：
+Optional PDF parsing:
 
 ```bash
 pip install -e ".[pdf]"
 ```
 
-## 快速使用
+## Configure NVIDIA NIM
 
-最简单的方式：只输入研究议题。
+Do not commit real API keys.
+
+```bash
+copy .env.example .env
+```
+
+Edit `.env`:
+
+```text
+NVIDIA_API_KEY=nvapi-your-key-here
+NVIDIA_BASE_URL=https://integrate.api.nvidia.com/v1
+NVIDIA_MODEL=deepseek-ai/deepseek-v4-flash
+```
+
+Optional planner / writer split:
+
+```text
+NVIDIA_PLANNER_MODEL=qwen/qwen3.5-122b-a10b
+NVIDIA_WRITER_MODEL=deepseek-ai/deepseek-v4-flash
+```
+
+## Quick Start
+
+Run a full research task:
 
 ```bash
 python -m agent3gpp "请分析4G和5G在RRC re-establishment流程的异同"
 ```
 
-等价显式命令：
+Equivalent explicit command:
 
 ```bash
 python -m agent3gpp research "请分析4G和5G在RRC re-establishment流程的异同"
 ```
 
-报告默认保存到 `runs/`。如果只想打印、不保存：
+Print without saving:
 
 ```bash
 python -m agent3gpp research "请分析4G和5G在RRC re-establishment流程的异同" --no-save
 ```
 
-查看 Planner 生成的研究计划：
+Inspect only the generated plan:
 
 ```bash
 python -m agent3gpp plan "请分析4G和5G在RRC re-establishment流程的异同"
 ```
 
-手动下载、解析、检索：
+Manual evidence workflow:
 
 ```bash
 python -m agent3gpp fetch-spec --spec 38.331
@@ -97,63 +92,86 @@ python -m agent3gpp parse
 python -m agent3gpp search RRCReestablishment --limit 5
 ```
 
-专利背景辅助分析：
+## Commands
 
-```bash
-python -m agent3gpp patent-search "3GPP RedCap reduced capability UE background" --limit 3
-python -m agent3gpp patent-background "https://patents.google.com/patent/..."
+| Command | Purpose |
+| --- | --- |
+| `research <question>` | Run full agentic research and save a report |
+| `ask <question>` | Alias-style research command |
+| `plan <question>` | Generate the research plan only |
+| `fetch-spec --spec 38.331` | Download an official 3GPP spec archive |
+| `parse` | Parse local source files and rebuild the index |
+| `search <query>` | Search the local evidence database |
+| `patent-search <query>` | Search Google Patents for auxiliary background |
+| `patent-background <url>` | Extract patent background text from a patent URL |
+
+Patent material is auxiliary only. It can help infer engineering or commercial pain points, but it cannot confirm 3GPP standards facts.
+
+## Report Structure
+
+Reports follow `templates/deep-research-report.md` and should include:
+
+- Executive Summary with `confirmed` / `evidence-grounded` / `needs_verification` labels.
+- Research Scope.
+- Methodology.
+- Source Inventory.
+- Evidence Table.
+- Comparative Matrix when relevant.
+- Procedure Deep Dive.
+- Interpretation and implementation impact.
+- Gaps, risks, and next actions.
+- Reusable engineering brief.
+
+`confirmed` claims require an official URL and pointer. Missing CR, TDoc, Meeting Report, or clause evidence should be explicit.
+
+## Local Data
+
+The agent writes local working artifacts under:
+
+```text
+data/incoming/
+data/processed/
+data/index/
+runs/
 ```
 
-专利背景只能用于反推 feature 的工程/商业痛点，不能作为 3GPP 标准结论。报告中应放入 `Patent Background / 专利背景与痛点反推` 章节，并标注为 `auxiliary_background` 或 `inference`。
+These are ignored by Git except for `.gitkeep` placeholders.
 
-## 深度研究输出
+## Relationship To 3GPP Research Kit
 
-Agent 使用 `templates/deep-research-report.md` 作为报告结构约束。报告至少包含：
+`3gpp-research-kit` is the reusable workbench and evidence toolkit: workflows, templates, source notes, parsing/indexing/search commands, and evidence verification.
 
-- Executive Summary / 结论摘要，逐条标注 `confirmed` / `evidence-grounded` / `needs_verification`
-- Research Scope / 研究范围
-- Methodology / 研究方法
-- Source Inventory / 资料清单
-- Evidence Table / 证据表
-- Comparative Matrix / 对比矩阵
-- Procedure Deep Dive / 流程深化
-- Interpretation / 解释与影响
-- Gaps, Risks, and Next Actions / 缺口、风险与下一步
-- Reusable Brief / 可复用摘要
+`3gpp-research-agent` is a dedicated CLI agent: planner, model orchestration, report writer, specialized report logic, and run management.
 
-`confirmed` 结论必须有官方 URL 和 pointer。缺少 CR、TDoc、Meeting Report 或 clause pointer 的内容必须标为 `needs_verification` 或说明证据缺口。
+Current implementation note: this repository still contains a lightweight evidence store in `agent3gpp/store.py` so the agent can run independently. A future direction is to use `3gpp-research-kit` as the shared evidence backend and keep this repository focused on agent planning and report generation.
 
-## 当前能力
+## Current Capabilities
 
-- 从 3GPP 官方 archive 下载 TS/TR ZIP
-- 解压 ZIP
-- 解析 DOCX / TXT / MD / CSV / HTML
-- DOCX 解析默认保留 Word Track Changes：`+` 表示新增，`-` 表示删除，避免把删除内容当作当前有效条文
-- 可选解析 PDF
-- 生成 `data/index/metadata.csv`
-- 建立 `data/index/research.db` SQLite FTS 检索库
-- 建立基础关系表
-- 使用 NVIDIA NIM chat completions 进行规划和报告生成
-- 默认使用 `deepseek-ai/deepseek-v4-flash`
-- 默认保存研究报告到 `runs/`
-- 可查询 Google Patents 并提取 Background 作为辅助痛点分析
+- Official 3GPP spec archive download.
+- ZIP extraction.
+- DOCX / TXT / MD / CSV / HTML parsing.
+- DOCX track-change aware parsing.
+- Optional PDF parsing with `pypdf`.
+- SQLite FTS evidence database.
+- Basic relation table.
+- NVIDIA NIM chat completions for planning and writing.
+- Local fallback report generation for selected cases.
+- Google Patents search/background extraction for auxiliary context.
 
-## 当前边界
+## Current Limits
 
-- CR / TDoc / Meeting Report 的自动定位还没有做到完整 Portal 级覆盖。
-- GraphRAG 目前是基础关系表，不是完整图数据库。
-- 与 `3gpp-research-kit` 的复用关系还没有完全 SDK 化；当前仍使用内置 `agent3gpp/store.py` 跑通端到端闭环。
-- `confirmed` 依赖本地检索到的官方资料、URL 和 pointer；关键结论仍建议专家复核。
-- NVIDIA 模型目录会变化，可通过 `NVIDIA_MODEL`、`NVIDIA_PLANNER_MODEL`、`NVIDIA_WRITER_MODEL` 或 `--model` 调整。
+- CR / TDoc / Meeting Report automation is not portal-scale yet.
+- GraphRAG is a basic relation table, not a full graph database.
+- Clause pointers are often chunk-level unless more exact source metadata is available.
+- Model availability on NVIDIA NIM can change; configure models through env vars or `--model`.
+- Expert review is still required for high-impact standards conclusions.
 
-## GitHub 发布前检查
+## Safety
 
-- 不提交 `.env`
-- 不提交 `data/incoming/`、`data/processed/`、`data/index/` 里的大文件和生成库
-- 保留 `runs/.gitkeep`，不提交实际研究报告
-- 运行 `python -m py_compile agent3gpp\store.py agent3gpp\nvidia_client.py agent3gpp\agent.py agent3gpp\__main__.py`
+- Do not commit `.env`.
+- Do not commit downloaded specs, generated indexes, or actual research reports.
+- Treat third-party commentary, patents, and model outputs as leads, not official standards evidence.
 
-## Sources
+## License
 
-- NVIDIA NIM for LLMs documents an OpenAI-compatible inference API with `POST /v1/chat/completions`.
-- 当前 NVIDIA `/v1/models` 返回的可用模型包括 `qwen/qwen3.5-397b-a17b`、`qwen/qwen3.5-122b-a10b`、`qwen/qwen3-coder-480b-a35b-instruct`、`deepseek-ai/deepseek-v4-pro`、`deepseek-ai/deepseek-v4-flash`、`minimaxai/minimax-m2.7`。本项目默认选择实测更稳定的 `deepseek-ai/deepseek-v4-flash` 作为报告 Writer。
+MIT.
